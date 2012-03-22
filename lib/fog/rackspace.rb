@@ -77,5 +77,52 @@ module Fog
         '%' + $1.unpack('H2' * $1.bytesize).join('%').upcase
       end
     end
+    
+    # keystone style auth
+    def self.authenticate_v2(options, connection_options = {})
+       rackspace_auth_url = options[:rackspace_auth_url] || "https://identity.rackspace.com/v2.0"
+       uri = URI.parse(rackspace_auth_url)
+       connection = Fog::Connection.new(rackspace_auth_url, false, connection_options)
+       @rackspace_api_key  = options[:rackspace_api_key]
+       @rackspace_username = options[:rackspace_username]
+       @rackspace_tenant = options[:rackspace_tenant]
+       @rackspace_region = options[:rackspace_region]
+       @rackspace_compute_service_name = options[:rackspace_compute_service_name]
+
+       req_body= {
+         'auth' => {
+           'RAX-KSKEY:apiKeyCredentials'  => {
+             'username' => @rackspace_username,
+             'apiKey' => @rackspace_api_key
+           }
+         }
+       }
+       req_body['auth']['tenantName'] = @rackspace_tenant if @rackspace_tenant
+
+       response = connection.request({
+         :expects  => [200, 204],
+         :headers => {'Content-Type' => 'application/json'},
+         :body  => MultiJson.encode(req_body),
+         :host     => uri.host,
+         :method   => 'POST',
+         :path     =>  (uri.path and not uri.path.empty?) ? uri.path+"/tokens" : '/v2.0/tokens'
+       })
+       body=MultiJson.decode(response.body)
+       
+       puts body.inspect
+     
+       if svc = body['access']['serviceCatalog'].detect{|x| x['name'] == @rackspace_compute_service_name}
+         mgmt_url = svc['endpoints'].detect{|x| x['publicURL']}['publicURL']
+         token = body['access']['token']['id']
+         return {
+           :token => token,
+           :server_management_url => mgmt_url
+         } 
+       else
+         raise "Unable to parse service catalog."
+       end
+ 
+     end
+    
   end
 end

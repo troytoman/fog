@@ -8,6 +8,7 @@ module Fog
       requires :rackspace_api_key, :rackspace_username
       recognizes :rackspace_auth_url, :rackspace_servicenet, :persistent
       recognizes :rackspace_auth_token, :rackspace_management_url
+      recognizes :rackspace_region, :rackspace_compute_service_name
 
       model_path 'fog/rackspace/models/compute'
       model       :flavor
@@ -85,6 +86,8 @@ module Fog
           @rackspace_servicenet = options[:rackspace_servicenet]
           @rackspace_auth_token = options[:rackspace_auth_token]
           @rackspace_management_url = options[:rackspace_management_url]
+          @rackspace_region = options[:rackspace_region]
+          @rackspace_compute_service_name = options[:rackspace_compute_service_name]
           @rackspace_must_reauthenticate = false
           @connection_options = options[:connection_options] || {}
           authenticate
@@ -137,11 +140,21 @@ module Fog
             options = {
               :rackspace_api_key  => @rackspace_api_key,
               :rackspace_username => @rackspace_username,
-              :rackspace_auth_url => @rackspace_auth_url
+              :rackspace_auth_url => @rackspace_auth_url,
+              :rackspace_region => @rackspace_region,
+              :rackspace_compute_service_name => @rackspace_compute_service_name
             }
-            credentials = Fog::Rackspace.authenticate(options, @connection_options)
-            @auth_token = credentials['X-Auth-Token']
-            uri = URI.parse(credentials['X-Server-Management-Url'])
+            puts "AUTH URL: " + @rackspace_auth_url
+            if @rackspace_auth_url =~ /.*v2.0\/?$/
+              credentials = Fog::Rackspace.authenticate_v2(options, @connection_options)
+              @auth_token = credentials[:token]
+              url = credentials[:server_management_url]
+              uri = URI.parse(url)
+            else    
+              credentials = Fog::Rackspace.authenticate(options, @connection_options)
+              @auth_token = credentials['X-Auth-Token']
+              uri = URI.parse(credentials['X-Server-Management-Url'])
+            end
           else
             @auth_token = @rackspace_auth_token
             uri = URI.parse(@rackspace_management_url)
